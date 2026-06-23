@@ -1,0 +1,187 @@
+version: 1
+project:
+  name: penpot
+  description: >
+    Narrow ws0 docker-compose pressure slice for Penpot's shared infra and main devenv.
+    This contract intentionally models only the repo's explicit compose-owned developer runtime path.
+  type: application
+execution:
+  default_context: host
+  contexts:
+    host:
+      backend: native
+      requirements:
+        tools:
+          docker: "*"
+surfaces:
+  ui:
+    kind: http
+    label: Penpot Dev UI
+    purpose: Canonical ws0 browser-facing developer surface
+    visibility: public
+    port: 3450
+    path: /
+    readiness:
+      kind: tcp
+      interval: 5s
+      timeout: 5s
+      retries: 24
+      start_period: 30s
+tasks:
+  network:ensure:
+    context: host
+    description: Ensure the shared external penpot docker network exists
+    action:
+      kind: ensure_bundle
+      steps:
+        - kind: ensure_container_network
+          name: penpot_shared
+    requirements:
+      tools:
+        docker: "*"
+  infra:up:
+    context: host
+    description: Start the shared ws0 infra compose project
+    depends_on:
+      - network:ensure
+    adapter_inputs:
+      compose:
+        env_files:
+          - docker/devenv/defaults.env
+        files:
+          - docker/devenv/docker-compose.infra.yml
+        project_name: penpotdev-infra
+    command:
+      exe: docker
+      args:
+        - compose
+        - up
+        - -d
+    requirements:
+      tools:
+        docker: "*"
+  infra:down:
+    context: host
+    description: Stop the shared ws0 infra compose project
+    adapter_inputs:
+      compose:
+        env_files:
+          - docker/devenv/defaults.env
+        files:
+          - docker/devenv/docker-compose.infra.yml
+        project_name: penpotdev-infra
+    command:
+      exe: docker
+      args:
+        - compose
+        - down
+        - -t
+        - "2"
+    requirements:
+      tools:
+        docker: "*"
+  devenv:up:
+    context: host
+    description: Start the ws0 main devenv container after shared infra is ready
+    adapter_inputs:
+      compose:
+        env_files:
+          - docker/devenv/defaults.env
+        files:
+          - docker/devenv/docker-compose.main.yml
+        project_name: penpotdev-ws0
+    env:
+      CURRENT_USER_ID: ${OTA_HOST_UID}
+      PENPOT_SOURCE_PATH: ${OTA_HOST_WORKSPACE}
+      PENPOT_TENANT: ""
+    runtime:
+      kind: service
+      surfaces:
+        - ui
+      listeners:
+        http:
+          protocol: http
+          bind:
+            address: 127.0.0.1
+            port:
+              mode: fixed
+              value: 3450
+          project:
+            host:
+              address: 127.0.0.1
+              primary: true
+              port:
+                mode: fixed
+                value: 3450
+              path: /
+    command:
+      exe: docker
+      args:
+        - compose
+        - up
+        - -d
+        - main
+    requirements:
+      tools:
+        docker: "*"
+  devenv:down:
+    context: host
+    description: Stop the ws0 main devenv compose project
+    adapter_inputs:
+      compose:
+        env_files:
+          - docker/devenv/defaults.env
+        files:
+          - docker/devenv/docker-compose.main.yml
+        project_name: penpotdev-ws0
+    env:
+      CURRENT_USER_ID: ${OTA_HOST_UID}
+      PENPOT_SOURCE_PATH: ${OTA_HOST_WORKSPACE}
+      PENPOT_TENANT: ""
+    command:
+      exe: docker
+      args:
+        - compose
+        - down
+        - -t
+        - "2"
+    requirements:
+      tools:
+        docker: "*"
+  verify:
+    description: Run the narrow contract verification slice
+    aggregate:
+      tasks:
+        - network:ensure
+        - infra:up
+workflows:
+  default: devenv
+  infra:
+    intent: packaged_runtime
+    description: Run the shared infra compose project with task-owned compose adapter truth
+    run:
+      task: infra:up
+  devenv:
+    intent: packaged_runtime
+    description: >
+      Bring up the ws0 main devenv after shared infra using task-owned compose
+      adapter truth and contract-owned host-derived env injection.
+    prepare:
+      task: infra:up
+    readiness:
+      surfaces:
+        - ui
+    exposes:
+      - surface: ui
+    run:
+      task: devenv:up
+agent:
+  bootstrap:
+    ota:
+      note: Only install ota if it is missing and installation is approved.
+      source:
+        kind: branch
+        branch: 1.6.22-implementation
+metadata:
+  ota:
+    minimum_version: "1.6.22"

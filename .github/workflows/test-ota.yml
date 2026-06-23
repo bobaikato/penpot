@@ -1,0 +1,227 @@
+# <!--
+#                 █████
+#                ░░███
+#        ██████  ███████    ██████
+#       ███░░███░░░███░    ░░░░░███
+#      ░███ ░███  ░███      ███████
+#      ░███ ░███  ░███ ███ ███░░███
+#      ░░██████   ░░█████ ░░████████
+#       ░░░░░░     ░░░░░   ░░░░░░░░
+#
+#    Copyright (C) 2026 — 2026, Ota. All Rights Reserved.
+#
+#    DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
+#
+#    Licensed under the Apache License, Version 2.0. See LICENSE for the full license text.
+#    You may not use this file except in compliance with that License.
+#    Unless required by applicable law or agreed to in writing, software distributed under the
+#    License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
+#    either express or implied. See the License for the specific language governing permissions
+#    and limitations under the License.
+#
+#    If you need additional information or have any questions, please email: os@ota.run
+# -->
+
+name: Test Ota
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'ota.yaml'
+      - 'docker/devenv/defaults.env'
+      - 'docker/devenv/docker-compose.infra.yml'
+      - 'docker/devenv/docker-compose.main.yml'
+      - '.github/workflows/test-ota.yml'
+  push:
+    paths:
+      - 'ota.yaml'
+      - 'docker/devenv/defaults.env'
+      - 'docker/devenv/docker-compose.infra.yml'
+      - 'docker/devenv/docker-compose.main.yml'
+      - '.github/workflows/test-ota.yml'
+
+concurrency:
+  group: ota-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  OTA_NO_UPDATE_CHECK: '1'
+
+jobs:
+  contract:
+    name: Ota (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: ubuntu
+            os: ubuntu-latest
+            run_shell: bash
+            runtime_proof: true
+          - name: macos
+            os: macos-latest
+            run_shell: bash
+            runtime_proof: false
+          - name: windows
+            os: windows-latest
+            run_shell: pwsh
+            runtime_proof: false
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Set up ota
+        uses: ota-run/setup@v1.0.8
+        with:
+          source: contract
+          contract-path: ota.yaml
+
+      - name: Contract gates [bash]
+        if: matrix.run_shell == 'bash'
+        shell: bash
+        run: |
+          mkdir -p .ota/ci
+          ota validate --json . > .ota/ci/validate.json
+          python - <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          validate = json.loads(Path('.ota/ci/validate.json').read_text())
+          if not validate.get('ok'):
+              print(json.dumps(validate, indent=2))
+              sys.exit(1)
+          PY
+          set +e
+          ota doctor --json . > .ota/ci/doctor.json
+          doctor_status=$?
+          set -e
+          DOCTOR_STATUS="$doctor_status" python - <<'PY'
+          import json
+          import os
+          import sys
+          from pathlib import Path
+
+          report = json.loads(Path('.ota/ci/doctor.json').read_text())
+          if report.get('error') and int(os.environ['DOCTOR_STATUS']) != 0:
+              print(json.dumps(report, indent=2))
+              sys.exit(1)
+          if int(os.environ['DOCTOR_STATUS']) != 0 and not report.get('error'):
+              summary = report.get('summary') or {}
+              print(
+                  f"ota doctor is blocked on this runner "
+                  f"({summary.get('verdict', 'unknown')}); continuing with JSON truth."
+              )
+          PY
+          ota doctor . || true
+          ota tasks --use .
+          ota tasks --safe --use .
+          ota tasks --workflow infra .
+          ota tasks --workflow devenv .
+          ota execution topology --json . > .ota/ci/execution-topology.json
+
+      - name: Contract gates [pwsh]
+        if: matrix.run_shell == 'pwsh'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path .ota/ci | Out-Null
+          ota validate --json . | Out-File -FilePath .ota/ci/validate.json -Encoding utf8
+          $validate = Get-Content .ota/ci/validate.json -Raw | ConvertFrom-Json
+          if (-not $validate.ok) {
+            $validate | ConvertTo-Json -Depth 100
+            exit 1
+          }
+          ota doctor --json . | Out-File -FilePath .ota/ci/doctor.json -Encoding utf8
+          $doctor = Get-Content .ota/ci/doctor.json -Raw | ConvertFrom-Json
+          if ($null -ne $doctor.error) {
+            $doctor | ConvertTo-Json -Depth 100
+            exit 1
+          }
+          ota doctor .; if ($LASTEXITCODE -ne 0) { Write-Host 'ota doctor is blocked on this runner; continuing with JSON truth.' }
+          ota tasks --use .
+          ota tasks --safe --use .
+          ota tasks --workflow infra .
+          ota tasks --workflow devenv .
+          ota execution topology --json . | Out-File -FilePath .ota/ci/execution-topology.json -Encoding utf8
+
+      - name: Dry-run proof [bash]
+        if: matrix.run_shell == 'bash'
+        shell: bash
+        run: |
+          ota run infra:up --dry-run --json . > .ota/ci/run-infra-up-dry-run.json
+          ota run verify --dry-run --json . > .ota/ci/run-verify-dry-run.json
+          ota up --workflow infra --dry-run --json . > .ota/ci/up-infra-dry-run.json
+          ota up --workflow devenv --dry-run --json . > .ota/ci/up-devenv-dry-run.json
+          python - <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          reports = [
+              json.loads(Path('.ota/ci/run-infra-up-dry-run.json').read_text()),
+              json.loads(Path('.ota/ci/run-verify-dry-run.json').read_text()),
+              json.loads(Path('.ota/ci/up-infra-dry-run.json').read_text()),
+              json.loads(Path('.ota/ci/up-devenv-dry-run.json').read_text()),
+          ]
+          if not all(str(report.get('preview_status', '')).startswith('RUNNABLE') for report in reports):
+              print(json.dumps(reports, indent=2))
+              sys.exit(1)
+          PY
+
+      - name: Dry-run proof [pwsh]
+        if: matrix.run_shell == 'pwsh'
+        shell: pwsh
+        run: |
+          ota run infra:up --dry-run --json . | Out-File -FilePath .ota/ci/run-infra-up-dry-run.json -Encoding utf8
+          ota run verify --dry-run --json . | Out-File -FilePath .ota/ci/run-verify-dry-run.json -Encoding utf8
+          ota up --workflow infra --dry-run --json . | Out-File -FilePath .ota/ci/up-infra-dry-run.json -Encoding utf8
+          ota up --workflow devenv --dry-run --json . | Out-File -FilePath .ota/ci/up-devenv-dry-run.json -Encoding utf8
+          $infraRun = Get-Content .ota/ci/run-infra-up-dry-run.json -Raw | ConvertFrom-Json
+          $verifyRun = Get-Content .ota/ci/run-verify-dry-run.json -Raw | ConvertFrom-Json
+          $infraWorkflow = Get-Content .ota/ci/up-infra-dry-run.json -Raw | ConvertFrom-Json
+          $devenvWorkflow = Get-Content .ota/ci/up-devenv-dry-run.json -Raw | ConvertFrom-Json
+          foreach ($report in @($infraRun, $verifyRun, $infraWorkflow, $devenvWorkflow)) {
+            if (-not $report.preview_status.StartsWith('RUNNABLE')) {
+              $report | ConvertTo-Json -Depth 100
+              exit 1
+            }
+          }
+
+      - name: Execute finite task surface
+        if: matrix.runtime_proof
+        shell: bash
+        run: |
+          docker version
+          docker compose version
+          ota run network:ensure --native --stream .
+          ota run verify --native --stream .
+
+      - name: Execute runtime proof
+        if: matrix.runtime_proof
+        shell: bash
+        run: |
+          ota proof runtime --workflow devenv --native .
+
+      - name: Cleanup compose state
+        if: ${{ matrix.runtime_proof && always() }}
+        shell: bash
+        run: |
+          ota run devenv:down --native --stream . || true
+          ota run infra:down --native --stream . || true
+
+      - name: Upload failure artifacts
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ota-${{ matrix.name }}
+          path: .ota/
+          retention-days: 7
