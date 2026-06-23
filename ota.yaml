@@ -114,6 +114,10 @@ tasks:
       surfaces:
         - ui
         - ui:http
+      readiness:
+        kind: http
+        listener: http
+        path: /
       listeners:
         https:
           protocol: https
@@ -200,9 +204,10 @@ workflows:
       task: infra:up
     readiness:
       surfaces:
-        - ui
+        - ui:http
     exposes:
       - surface: ui
+      - surface: ui:http
     run:
       task: devenv:up
 agent:

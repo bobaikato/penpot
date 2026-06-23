@@ -156,6 +156,8 @@ jobs:
       - name: Dry-run proof [bash]
         if: matrix.run_shell == 'bash'
         shell: bash
+        env:
+          OTA_RUNTIME_PROOF: ${{ matrix.runtime_proof }}
         run: |
           mkdir -p .ota/ci
           ota run infra:up --dry-run --json . > .ota/ci/run-infra-up-dry-run.json
@@ -164,17 +166,25 @@ jobs:
           ota up --workflow devenv --dry-run --json . > .ota/ci/up-devenv-dry-run.json
           python - <<'PY'
           import json
+          import os
           import sys
           from pathlib import Path
 
-          reports = [
-              json.loads(Path('.ota/ci/run-infra-up-dry-run.json').read_text()),
-              json.loads(Path('.ota/ci/run-verify-dry-run.json').read_text()),
-              json.loads(Path('.ota/ci/up-infra-dry-run.json').read_text()),
-              json.loads(Path('.ota/ci/up-devenv-dry-run.json').read_text()),
-          ]
-          if not all(str(report.get('preview_status', '')).startswith('RUNNABLE') for report in reports):
-              print(json.dumps(reports, indent=2))
+          runtime_proof = os.environ.get('OTA_RUNTIME_PROOF', '').lower() == 'true'
+          reports = {
+              'run-infra-up': json.loads(Path('.ota/ci/run-infra-up-dry-run.json').read_text()),
+              'run-verify': json.loads(Path('.ota/ci/run-verify-dry-run.json').read_text()),
+              'up-infra': json.loads(Path('.ota/ci/up-infra-dry-run.json').read_text()),
+              'up-devenv': json.loads(Path('.ota/ci/up-devenv-dry-run.json').read_text()),
+          }
+          for name, report in reports.items():
+              if str(report.get('preview_status', '')).startswith('RUNNABLE'):
+                  continue
+              blocker = ((report.get('summary') or {}).get('primary_blocker') or {})
+              if (not runtime_proof) and blocker.get('code') == 'OTA_TOOL_MISSING':
+                  continue
+              print(name)
+              print(json.dumps(report, indent=2))
               sys.exit(1)
           PY
 
