@@ -25,8 +25,8 @@ surfaces:
       kind: tcp
       interval: 5s
       timeout: 5s
-      retries: 24
-      start_period: 30s
+      retries: 60
+      start_period: 60s
 tasks:
   network:ensure:
     context: host

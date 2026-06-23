@@ -157,6 +157,7 @@ jobs:
         if: matrix.run_shell == 'bash'
         shell: bash
         run: |
+          mkdir -p .ota/ci
           ota run infra:up --dry-run --json . > .ota/ci/run-infra-up-dry-run.json
           ota run verify --dry-run --json . > .ota/ci/run-verify-dry-run.json
           ota up --workflow infra --dry-run --json . > .ota/ci/up-infra-dry-run.json
@@ -181,6 +182,7 @@ jobs:
         if: matrix.run_shell == 'pwsh'
         shell: pwsh
         run: |
+          New-Item -ItemType Directory -Force -Path .ota/ci | Out-Null
           ota run infra:up --dry-run --json . | Out-File -FilePath .ota/ci/run-infra-up-dry-run.json -Encoding utf8
           ota run verify --dry-run --json . | Out-File -FilePath .ota/ci/run-verify-dry-run.json -Encoding utf8
           ota up --workflow infra --dry-run --json . | Out-File -FilePath .ota/ci/up-infra-dry-run.json -Encoding utf8
