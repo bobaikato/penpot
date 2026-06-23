@@ -15,14 +15,29 @@ execution:
           docker: "*"
 surfaces:
   ui:
-    kind: http
-    label: Penpot Dev UI
+    kind: https
+    label: Penpot Dev UI (HTTPS)
     purpose: Canonical ws0 browser-facing developer surface
+    visibility: public
+    port: 3449
+    path: /
+    readiness:
+      kind: http
+      method: GET
+      interval: 5s
+      timeout: 5s
+      retries: 60
+      start_period: 60s
+  ui:http:
+    kind: http
+    label: Penpot Dev UI (HTTP)
+    purpose: Secondary plain-HTTP ws0 browser-facing developer surface
     visibility: public
     port: 3450
     path: /
     readiness:
-      kind: tcp
+      kind: http
+      method: GET
       interval: 5s
       timeout: 5s
       retries: 60
@@ -98,7 +113,23 @@ tasks:
       kind: service
       surfaces:
         - ui
+        - ui:http
       listeners:
+        https:
+          protocol: https
+          bind:
+            address: 127.0.0.1
+            port:
+              mode: fixed
+              value: 3449
+          project:
+            host:
+              address: 127.0.0.1
+              primary: true
+              port:
+                mode: fixed
+                value: 3449
+              path: /
         http:
           protocol: http
           bind:
@@ -109,7 +140,6 @@ tasks:
           project:
             host:
               address: 127.0.0.1
-              primary: true
               port:
                 mode: fixed
                 value: 3450
