@@ -224,11 +224,38 @@ tasks:
       PENPOT_TENANT: ""
     runtime:
       kind: service
-      surfaces:
+      listeners:
         ui:
+          protocol: https
+          bind:
+            address: 127.0.0.1
+            port:
+              mode: fixed
+              value: 3449
           project:
             host:
+              address: 127.0.0.1
+              port:
+                mode: fixed
+                value: 3449
+              path: /
               primary: true
+        ui:http:
+          protocol: http
+          bind:
+            address: 127.0.0.1
+            port:
+              mode: fixed
+              value: 3450
+          project:
+            host:
+              address: 127.0.0.1
+              port:
+                mode: fixed
+                value: 3450
+              path: /
+      surfaces:
+        ui: {}
         ui:http: {}
       readiness:
         kind: http
@@ -342,6 +369,28 @@ workflows:
             adapter_inputs:
               compose:
                 project_name: penpotdev-ws1
+            runtime:
+              listeners:
+                ui:
+                  bind:
+                    port:
+                      mode: fixed
+                      value: 13449
+                  project:
+                    host:
+                      port:
+                        mode: fixed
+                        value: 13449
+                ui:http:
+                  bind:
+                    port:
+                      mode: fixed
+                      value: 13450
+                  project:
+                    host:
+                      port:
+                        mode: fixed
+                        value: 13450
           devenv:up:
             adapter_inputs:
               compose:
@@ -377,6 +426,28 @@ workflows:
             adapter_inputs:
               compose:
                 project_name: penpotdev-ws2
+            runtime:
+              listeners:
+                ui:
+                  bind:
+                    port:
+                      mode: fixed
+                      value: 23449
+                  project:
+                    host:
+                      port:
+                        mode: fixed
+                        value: 23449
+                ui:http:
+                  bind:
+                    port:
+                      mode: fixed
+                      value: 23450
+                  project:
+                    host:
+                      port:
+                        mode: fixed
+                        value: 23450
           devenv:up:
             adapter_inputs:
               compose:
@@ -414,37 +485,27 @@ workflows:
               compose:
                 project_name: penpotdev-ci
             runtime:
-              kind: service
               listeners:
                 ui:
-                  protocol: https
                   bind:
-                    address: 127.0.0.1
                     port:
                       mode: fixed
                       value: 43449
                   project:
                     host:
-                      address: 127.0.0.1
                       port:
                         mode: fixed
                         value: 43449
-                      path: /
-                      primary: true
                 ui:http:
-                  protocol: http
                   bind:
-                    address: 127.0.0.1
                     port:
                       mode: fixed
                       value: 43450
                   project:
                     host:
-                      address: 127.0.0.1
                       port:
                         mode: fixed
                         value: 43450
-                      path: /
               readiness:
                 kind: http
                 listener: ui:http
