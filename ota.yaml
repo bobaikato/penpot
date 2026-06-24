@@ -401,13 +401,13 @@ workflows:
       ci:
         description: Use a dedicated CI-safe workspace instance with non-default host ports for runtime proof.
         env:
-          PENPOT_PUBLIC_URI: https://localhost:33449
-          PENPOT_PUBLIC_HTTPS_PORT: "33449"
-          PENPOT_PUBLIC_HTTP_PORT: "33450"
-          PENPOT_MCP_PORT: "34401"
-          PENPOT_MCP_REPL_PORT: "34403"
-          SERENA_MCP_PORT: "44181"
-          SHADOW_SERVER_URL: wss://localhost:33449
+          PENPOT_PUBLIC_URI: https://localhost:43449
+          PENPOT_PUBLIC_HTTPS_PORT: "43449"
+          PENPOT_PUBLIC_HTTP_PORT: "43450"
+          PENPOT_MCP_PORT: "44401"
+          PENPOT_MCP_REPL_PORT: "44403"
+          SERENA_MCP_PORT: "54181"
+          SHADOW_SERVER_URL: wss://localhost:43449
         tasks:
           devenv:start:
             adapter_inputs:
@@ -431,9 +431,9 @@ workflows:
                 project_name: penpotdev-ci
         surfaces:
           ui:
-            port: 33449
+            port: 43449
           ui:http:
-            port: 33450
+            port: 43450
     readiness:
       surfaces:
         - ui:http
