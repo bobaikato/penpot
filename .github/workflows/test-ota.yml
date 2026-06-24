@@ -223,7 +223,7 @@ jobs:
         if: matrix.runtime_proof
         shell: bash
         run: |
-          ota proof runtime --workflow devenv --native --json . | tee .ota/ci/proof-devenv.json
+          ota proof runtime --workflow devenv@ci --native --json . | tee .ota/ci/proof-devenv.json
 
       - name: Cleanup compose state
         if: ${{ matrix.runtime_proof && always() }}

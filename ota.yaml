@@ -5,6 +5,32 @@ project:
     Compose-owned Penpot developer runtime slice with shared infra plus named workspace instances.
     The default instance is ws0, and additional wsN instances are selected through workflow-owned overlays.
   type: application
+env:
+  profiles:
+    devenv:
+      render:
+        files:
+          - path: .devenv/mcp/claude-code.json
+            format: json
+            sources:
+              - .devenv/shared/claude-code.json
+              - .devenv/templates/claude-code.json
+          - path: .devenv/mcp/opencode.json
+            format: json
+            sources:
+              - .devenv/shared/opencode.json
+              - .devenv/templates/opencode.json
+          - path: .vscode/mcp.json
+            format: json
+            merge_into_existing: true
+            sources:
+              - .devenv/shared/vscode.json
+              - .devenv/templates/vscode.json
+          - path: .devenv/mcp/codex.toml
+            format: toml
+            sources:
+              - .devenv/shared/codex.toml
+              - .devenv/templates/codex.toml
 execution:
   default_context: host
   contexts:
@@ -224,6 +250,31 @@ tasks:
     requirements:
       tools:
         docker: "*"
+  devenv:attach:
+    context: host
+    description: Attach to the running tmux session inside the selected Penpot workspace instance
+    adapter_inputs:
+      compose:
+        env_files:
+          - docker/devenv/defaults.env
+        files:
+          - docker/devenv/docker-compose.main.yml
+        project_name: penpotdev-ws0
+    compose:
+      kind: attach
+      service: main
+      exe: sudo
+      args:
+        - -EH
+        - -u
+        - penpot
+        - tmux
+        - attach
+        - -t
+        - penpot
+    requirements:
+      tools:
+        docker: "*"
   devenv:down:
     context: host
     description: Stop the selected main devenv compose project
@@ -266,16 +317,26 @@ workflows:
     description: >
       Bring up one selected Penpot workspace instance after shared infra using
       task-owned compose adapter truth and contract-owned host-derived env injection.
+    env:
+      profile: devenv
     prepare:
       task: infra:up
     instances:
       default: ws0
       ws0:
         description: Bind the live repo at OTA_HOST_WORKSPACE as the default Penpot workspace instance.
+        env:
+          PENPOT_MCP_PORT: "4401"
+          SERENA_MCP_PORT: "14181"
       ws1:
         description: Bind the first cloned Penpot workspace under OTA_HOST_HOME for parallel development.
+        topology:
+          requires_instances:
+            - ws0
         env:
+          PENPOT_MCP_PORT: "14401"
           PENPOT_SOURCE_PATH: ${OTA_HOST_HOME}/.penpot/penpot_workspaces/ws1
+          SERENA_MCP_PORT: "24181"
         tasks:
           devenv:start:
             adapter_inputs:
@@ -286,6 +347,10 @@ workflows:
               compose:
                 project_name: penpotdev-ws1
           devenv:session:start:
+            adapter_inputs:
+              compose:
+                project_name: penpotdev-ws1
+          devenv:attach:
             adapter_inputs:
               compose:
                 project_name: penpotdev-ws1
@@ -300,8 +365,13 @@ workflows:
             port: 13450
       ws2:
         description: Bind the second cloned Penpot workspace under OTA_HOST_HOME for parallel development.
+        topology:
+          requires_instances:
+            - ws0
         env:
+          PENPOT_MCP_PORT: "24401"
           PENPOT_SOURCE_PATH: ${OTA_HOST_HOME}/.penpot/penpot_workspaces/ws2
+          SERENA_MCP_PORT: "34181"
         tasks:
           devenv:start:
             adapter_inputs:
@@ -315,6 +385,10 @@ workflows:
             adapter_inputs:
               compose:
                 project_name: penpotdev-ws2
+          devenv:attach:
+            adapter_inputs:
+              compose:
+                project_name: penpotdev-ws2
           devenv:down:
             adapter_inputs:
               compose:
@@ -324,6 +398,42 @@ workflows:
             port: 23449
           ui:http:
             port: 23450
+      ci:
+        description: Use a dedicated CI-safe workspace instance with non-default host ports for runtime proof.
+        env:
+          PENPOT_PUBLIC_URI: https://localhost:33449
+          PENPOT_PUBLIC_HTTPS_PORT: "33449"
+          PENPOT_PUBLIC_HTTP_PORT: "33450"
+          PENPOT_MCP_PORT: "34401"
+          PENPOT_MCP_REPL_PORT: "34403"
+          SERENA_MCP_PORT: "44181"
+          SHADOW_SERVER_URL: wss://localhost:33449
+        tasks:
+          devenv:start:
+            adapter_inputs:
+              compose:
+                project_name: penpotdev-ci
+          devenv:up:
+            adapter_inputs:
+              compose:
+                project_name: penpotdev-ci
+          devenv:session:start:
+            adapter_inputs:
+              compose:
+                project_name: penpotdev-ci
+          devenv:attach:
+            adapter_inputs:
+              compose:
+                project_name: penpotdev-ci
+          devenv:down:
+            adapter_inputs:
+              compose:
+                project_name: penpotdev-ci
+        surfaces:
+          ui:
+            port: 33449
+          ui:http:
+            port: 33450
     readiness:
       surfaces:
         - ui:http
@@ -332,6 +442,8 @@ workflows:
       - surface: ui:http
     run:
       task: devenv:start
+    attach:
+      task: devenv:attach
 agent:
   bootstrap:
     ota:
