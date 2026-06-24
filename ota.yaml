@@ -95,6 +95,22 @@ tasks:
     requirements:
       tools:
         docker: "*"
+  devenv:image:pull:
+    context: host
+    description: Pull the published Penpot devenv image before starting ws0
+    command:
+      exe: docker
+      args:
+        - pull
+        - penpotapp/devenv:latest
+    requirements:
+      tools:
+        docker: "*"
+    effects:
+      network: true
+      network_kind: dependency_hydration
+      external_state:
+        - docker
   devenv:up:
     context: host
     description: Start the ws0 main devenv container after shared infra is ready
@@ -155,6 +171,8 @@ tasks:
         - up
         - -d
         - main
+    depends_on:
+      - devenv:image:pull
     requirements:
       tools:
         docker: "*"
