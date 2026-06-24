@@ -290,7 +290,7 @@ agent:
       note: Only install ota if it is missing and installation is approved.
       source:
         kind: git_rev
-        rev: f78c7f1cd4fdae0c92be06d9834e2b3c9957beee
+        rev: 19a29057cc40a87564e84a5865540fd2aa5f53f5
 metadata:
   ota:
     minimum_version: "1.6.22"
