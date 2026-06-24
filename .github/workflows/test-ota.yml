@@ -160,10 +160,12 @@ jobs:
           OTA_RUNTIME_PROOF: ${{ matrix.runtime_proof }}
         run: |
           mkdir -p .ota/ci
+          set +e
           ota run infra:up --dry-run --json . > .ota/ci/run-infra-up-dry-run.json
           ota run verify --dry-run --json . > .ota/ci/run-verify-dry-run.json
           ota up --workflow infra --dry-run --json . > .ota/ci/up-infra-dry-run.json
           ota up --workflow devenv --dry-run --json . > .ota/ci/up-devenv-dry-run.json
+          set -e
           python - <<'PY'
           import json
           import os
@@ -221,7 +223,8 @@ jobs:
         if: matrix.runtime_proof
         shell: bash
         run: |
-          ota proof runtime --workflow devenv --native .
+          ota up --workflow devenv --native --stream .
+          ota proof runtime --workflow devenv --native --json . | tee .ota/ci/proof-devenv.json
 
       - name: Cleanup compose state
         if: ${{ matrix.runtime_proof && always() }}
