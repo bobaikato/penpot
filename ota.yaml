@@ -173,9 +173,40 @@ tasks:
         - main
     depends_on:
       - devenv:image:pull
+    after_success:
+      - devenv:session:start
     requirements:
       tools:
         docker: "*"
+  devenv:session:start:
+    context: host
+    description: Start the detached tmux-backed Penpot dev processes inside the running main container
+    adapter_inputs:
+      compose:
+        env_files:
+          - docker/devenv/defaults.env
+        files:
+          - docker/devenv/docker-compose.main.yml
+        project_name: penpotdev-ws0
+    compose:
+      kind: exec
+      detach: true
+      service: main
+      exe: sh
+      args:
+        - -lc
+        - sudo -EH -u penpot PENPOT_TMUX_ATTACH=false /home/start-tmux.sh
+    requirements:
+      tools:
+        docker: "*"
+    effects:
+      network: true
+      network_kind: dependency_hydration
+      writes:
+        - frontend/node_modules
+        - exporter/node_modules
+      external_state:
+        - docker
   devenv:down:
     context: host
     description: Stop the ws0 main devenv compose project
