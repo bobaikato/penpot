@@ -413,6 +413,46 @@ workflows:
             adapter_inputs:
               compose:
                 project_name: penpotdev-ci
+            runtime:
+              kind: service
+              listeners:
+                ui:
+                  protocol: https
+                  bind:
+                    address: 127.0.0.1
+                    port:
+                      mode: fixed
+                      value: 43449
+                  project:
+                    host:
+                      address: 127.0.0.1
+                      port:
+                        mode: fixed
+                        value: 43449
+                      path: /
+                      primary: true
+                ui:http:
+                  protocol: http
+                  bind:
+                    address: 127.0.0.1
+                    port:
+                      mode: fixed
+                      value: 43450
+                  project:
+                    host:
+                      address: 127.0.0.1
+                      port:
+                        mode: fixed
+                        value: 43450
+                      path: /
+              readiness:
+                kind: http
+                listener: ui:http
+                path: /
+                interval: 5s
+                timeout: 5s
+                retries: 60
+                start_period: 60s
           devenv:up:
             adapter_inputs:
               compose:
