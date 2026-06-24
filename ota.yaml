@@ -150,8 +150,6 @@ tasks:
         - main
     depends_on:
       - devenv:image:pull
-    after_success:
-      - devenv:session:start
     requirements:
       tools:
         docker: "*"
@@ -184,6 +182,48 @@ tasks:
         - exporter/node_modules
       external_state:
         - docker
+  devenv:start:
+    context: host
+    description: Confirm the selected Penpot workspace instance is started after container and detached session bootstrap
+    adapter_inputs:
+      compose:
+        env_files:
+          - docker/devenv/defaults.env
+        files:
+          - docker/devenv/docker-compose.main.yml
+        project_name: penpotdev-ws0
+    env:
+      CURRENT_USER_ID: ${OTA_HOST_UID}
+      PENPOT_SOURCE_PATH: ${OTA_HOST_WORKSPACE}
+      PENPOT_TENANT: ""
+    runtime:
+      kind: service
+      surfaces:
+        ui:
+          project:
+            host:
+              primary: true
+        ui:http: {}
+      readiness:
+        kind: http
+        listener: ui:http
+        path: /
+        interval: 5s
+        timeout: 5s
+        retries: 60
+        start_period: 60s
+    command:
+      exe: docker
+      args:
+        - compose
+        - ps
+        - main
+    depends_on:
+      - devenv:up
+      - devenv:session:start
+    requirements:
+      tools:
+        docker: "*"
   devenv:down:
     context: host
     description: Stop the selected main devenv compose project
@@ -237,6 +277,10 @@ workflows:
         env:
           PENPOT_SOURCE_PATH: ${OTA_HOST_HOME}/.penpot/penpot_workspaces/ws1
         tasks:
+          devenv:start:
+            adapter_inputs:
+              compose:
+                project_name: penpotdev-ws1
           devenv:up:
             adapter_inputs:
               compose:
@@ -259,6 +303,10 @@ workflows:
         env:
           PENPOT_SOURCE_PATH: ${OTA_HOST_HOME}/.penpot/penpot_workspaces/ws2
         tasks:
+          devenv:start:
+            adapter_inputs:
+              compose:
+                project_name: penpotdev-ws2
           devenv:up:
             adapter_inputs:
               compose:
@@ -283,14 +331,14 @@ workflows:
       - surface: ui
       - surface: ui:http
     run:
-      task: devenv:up
+      task: devenv:start
 agent:
   bootstrap:
     ota:
       note: Only install ota if it is missing and installation is approved.
       source:
-        kind: git_rev
-        rev: 19a29057cc40a87564e84a5865540fd2aa5f53f5
+        kind: version
+        version: v1.6.22
 metadata:
   ota:
     minimum_version: "1.6.22"
