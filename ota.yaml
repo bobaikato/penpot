@@ -2,8 +2,8 @@ version: 1
 project:
   name: penpot
   description: >
-    Narrow ws0 docker-compose pressure slice for Penpot's shared infra and main devenv.
-    This contract intentionally models only the repo's explicit compose-owned developer runtime path.
+    Compose-owned Penpot developer runtime slice with shared infra plus named workspace instances.
+    The default instance is ws0, and additional wsN instances are selected through workflow-owned overlays.
   type: application
 execution:
   default_context: host
@@ -17,7 +17,7 @@ surfaces:
   ui:
     kind: https
     label: Penpot Dev UI (HTTPS)
-    purpose: Canonical ws0 browser-facing developer surface
+    purpose: Canonical browser-facing developer surface for the selected workspace instance
     visibility: public
     port: 3449
     path: /
@@ -31,7 +31,7 @@ surfaces:
   ui:http:
     kind: http
     label: Penpot Dev UI (HTTP)
-    purpose: Secondary plain-HTTP ws0 browser-facing developer surface
+    purpose: Secondary plain-HTTP browser-facing developer surface for the selected workspace instance
     visibility: public
     port: 3450
     path: /
@@ -56,7 +56,7 @@ tasks:
         docker: "*"
   infra:up:
     context: host
-    description: Start the shared ws0 infra compose project
+    description: Start the shared infra compose project
     depends_on:
       - network:ensure
     adapter_inputs:
@@ -77,7 +77,7 @@ tasks:
         docker: "*"
   infra:down:
     context: host
-    description: Stop the shared ws0 infra compose project
+    description: Stop the shared infra compose project
     adapter_inputs:
       compose:
         env_files:
@@ -97,7 +97,7 @@ tasks:
         docker: "*"
   devenv:image:pull:
     context: host
-    description: Pull the published Penpot devenv image before starting ws0
+    description: Pull the published Penpot devenv image before starting a workspace instance
     command:
       exe: docker
       args:
@@ -113,7 +113,7 @@ tasks:
         - docker
   devenv:up:
     context: host
-    description: Start the ws0 main devenv container after shared infra is ready
+    description: Start the selected main devenv container after shared infra is ready
     adapter_inputs:
       compose:
         env_files:
@@ -128,46 +128,19 @@ tasks:
     runtime:
       kind: service
       surfaces:
-        - ui
-        - ui:http
+        ui:
+          project:
+            host:
+              primary: true
+        ui:http: {}
       readiness:
         kind: http
-        listener: http
+        listener: ui:http
         path: /
         interval: 5s
         timeout: 5s
         retries: 60
         start_period: 60s
-      listeners:
-        https:
-          protocol: https
-          bind:
-            address: 127.0.0.1
-            port:
-              mode: fixed
-              value: 3449
-          project:
-            host:
-              address: 127.0.0.1
-              primary: true
-              port:
-                mode: fixed
-                value: 3449
-              path: /
-        http:
-          protocol: http
-          bind:
-            address: 127.0.0.1
-            port:
-              mode: fixed
-              value: 3450
-          project:
-            host:
-              address: 127.0.0.1
-              port:
-                mode: fixed
-                value: 3450
-              path: /
     command:
       exe: docker
       args:
@@ -184,7 +157,7 @@ tasks:
         docker: "*"
   devenv:session:start:
     context: host
-    description: Start the detached tmux-backed Penpot dev processes inside the running main container
+    description: Start the detached tmux-backed Penpot dev processes inside the selected running main container
     adapter_inputs:
       compose:
         env_files:
@@ -213,7 +186,7 @@ tasks:
         - docker
   devenv:down:
     context: host
-    description: Stop the ws0 main devenv compose project
+    description: Stop the selected main devenv compose project
     adapter_inputs:
       compose:
         env_files:
@@ -251,10 +224,58 @@ workflows:
   devenv:
     intent: packaged_runtime
     description: >
-      Bring up the ws0 main devenv after shared infra using task-owned compose
-      adapter truth and contract-owned host-derived env injection.
+      Bring up one selected Penpot workspace instance after shared infra using
+      task-owned compose adapter truth and contract-owned host-derived env injection.
     prepare:
       task: infra:up
+    instances:
+      default: ws0
+      ws0:
+        description: Bind the live repo at OTA_HOST_WORKSPACE as the default Penpot workspace instance.
+      ws1:
+        description: Bind the first cloned Penpot workspace under OTA_HOST_HOME for parallel development.
+        env:
+          PENPOT_SOURCE_PATH: ${OTA_HOST_HOME}/.penpot/penpot_workspaces/ws1
+        tasks:
+          devenv:up:
+            adapter_inputs:
+              compose:
+                project_name: penpotdev-ws1
+          devenv:session:start:
+            adapter_inputs:
+              compose:
+                project_name: penpotdev-ws1
+          devenv:down:
+            adapter_inputs:
+              compose:
+                project_name: penpotdev-ws1
+        surfaces:
+          ui:
+            port: 13449
+          ui:http:
+            port: 13450
+      ws2:
+        description: Bind the second cloned Penpot workspace under OTA_HOST_HOME for parallel development.
+        env:
+          PENPOT_SOURCE_PATH: ${OTA_HOST_HOME}/.penpot/penpot_workspaces/ws2
+        tasks:
+          devenv:up:
+            adapter_inputs:
+              compose:
+                project_name: penpotdev-ws2
+          devenv:session:start:
+            adapter_inputs:
+              compose:
+                project_name: penpotdev-ws2
+          devenv:down:
+            adapter_inputs:
+              compose:
+                project_name: penpotdev-ws2
+        surfaces:
+          ui:
+            port: 23449
+          ui:http:
+            port: 23450
     readiness:
       surfaces:
         - ui:http
